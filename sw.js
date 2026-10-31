@@ -1,6 +1,6 @@
 /* WordForge service worker: works offline, and quietly refreshes files in the background
    (stale-while-revalidate), so an updated words.js shows up on the next launch. */
-const CACHE = 'wordforge-shell-v11';
+const CACHE = 'wordforge-shell-v12';
 const SHELL = [
   './', './index.html', './styles.css', './core.js', './words.js', './app.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'

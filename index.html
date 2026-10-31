@@ -33,6 +33,10 @@
 @keyframes sp-drop{to{opacity:1;transform:none}}
 @keyframes sp-fade{to{opacity:1}}
 @keyframes sp-load{to{transform:none}}
+#splash:not(.go) .logo,#splash:not(.go) h1 span,#splash:not(.go) p,#splash:not(.go) .bar,#splash:not(.go) .bar b,#splash:not(.go) .logo i{animation-play-state:paused}
+#splash .tap{position:absolute;left:0;right:0;bottom:max(48px,env(safe-area-inset-bottom));text-align:center;font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:#a995d6;opacity:0;pointer-events:none;transition:opacity .4s ease}
+#splash.wait .tap{opacity:1;animation:sp-pulse 1.4s ease-in-out infinite}
+@keyframes sp-pulse{50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){#splash *{animation-duration:.01s!important;animation-delay:0s!important}}
 </style>
 </head>
@@ -42,7 +46,7 @@
   <h1 id="splash-name"></h1>
   <p>Forge your vocabulary</p>
   <div class="bar"><b></b></div>
-</div></div>
+</div><div class="tap">Tap to start</div></div>
 <script>
 (function () {
   var splash = document.getElementById('splash'), h1 = document.getElementById('splash-name');
@@ -52,7 +56,7 @@
   });
   var soundOn = true;
   try { var st = JSON.parse(localStorage.getItem('wordforge.v1') || 'null'); if (st && st.settings && st.settings.sound === false) soundOn = false; } catch (e) {}
-  var ctx = null, played = false;
+  var ctx = null, played = false, started = false, loaded = false, born = 0, MIN = 2300, hidden = false;
   function tone(f, t0, dur, type, vol) {
     var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + t0;
     o.type = type; o.frequency.setValueAtTime(f, t);
@@ -62,27 +66,37 @@
   function chime() {
     if (played || !ctx || ctx.state !== 'running') return;
     played = true;
-    tone(196, 0.0, 0.5, 'triangle', 0.16);              // low "whoomp" as the logo lands
-    tone(130, 0.0, 0.5, 'sine', 0.12);
-    [[1568, 0.55], [2093, 0.62], [2637, 0.69], [3136, 0.76]].forEach(function (n) { tone(n[0], n[1], 0.5, 'sine', 0.05); }); // the sparkle
-    [523, 659, 784].forEach(function (f, i) { tone(f, 1.3 + i * 0.06, 0.9, 'triangle', 0.07); }); // soft major chord as the tagline appears
+    tone(196, 0.0, 0.5, 'triangle', 0.16); tone(130, 0.0, 0.5, 'sine', 0.12);
+    [[1568, 0.55], [2093, 0.62], [2637, 0.69], [3136, 0.76]].forEach(function (n) { tone(n[0], n[1], 0.5, 'sine', 0.05); });
+    [523, 659, 784].forEach(function (f, i) { tone(f, 1.3 + i * 0.06, 0.9, 'triangle', 0.07); });
   }
-  if (soundOn) {
-    try {
-      var AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) {
-        ctx = new AC();
-        var go = function () { if (ctx.state === 'suspended') ctx.resume().then(chime, function () {}); else chime(); };
-        go();
-        // browsers may hold sound until the first tap or key: play it then, if the splash is still up
-        ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) { window.addEventListener(ev, function () { if (!played && !splash.classList.contains('out')) go(); }, { once: true, passive: true }); });
-      }
-    } catch (e) {}
+  function hide() {
+    if (hidden) return; hidden = true; splash.classList.add('out');
+    setTimeout(function () { if (splash.parentNode) splash.parentNode.removeChild(splash); try { ctx && ctx.close(); } catch (e) {} }, 800);
   }
-  var born = Date.now(), MIN = 2300;
-  function hide() { splash.classList.add('out'); setTimeout(function () { if (splash.parentNode) splash.parentNode.removeChild(splash); try { ctx && ctx.close(); } catch (e) {} }, 800); }
-  window.addEventListener('load', function () { setTimeout(hide, Math.max(0, MIN - (Date.now() - born))); });
-  setTimeout(hide, 6000); // never get stuck
+  function maybeHide() { if (started && loaded) setTimeout(hide, Math.max(0, MIN - (Date.now() - born))); }
+  // start the show: animation and sound begin together
+  function begin() {
+    if (started) return; started = true; born = Date.now();
+    splash.classList.remove('wait'); splash.classList.add('go');
+    chime(); maybeHide();
+  }
+  window.addEventListener('load', function () { loaded = true; maybeHide(); });
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if (!soundOn || !AC) { begin(); return; }
+  try { ctx = new AC(); } catch (e) { begin(); return; }
+  // Browsers only allow sound after a tap or key press. If sound is already allowed, play straight away;
+  // if not, wait for one tap so the animation and the sound start together.
+  function tryNow() { if (ctx.state === 'running') begin(); }
+  try { ctx.resume && ctx.resume().then(function () { setTimeout(tryNow, 30); }, function () {}); } catch (e) {}
+  setTimeout(function () {
+    if (started) return;
+    if (ctx.state === 'running') { begin(); return; }
+    splash.classList.add('wait');
+    var go = function () { ctx.resume().then(begin, begin); setTimeout(begin, 400); };
+    ['pointerdown', 'keydown', 'touchend', 'click'].forEach(function (ev) { window.addEventListener(ev, go, { once: true, passive: true }); });
+    setTimeout(begin, 15000); // never get stuck behind the prompt
+  }, 120);
 })();
 </script>
 <div id="app" class="app"></div>
